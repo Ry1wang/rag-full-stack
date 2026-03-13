@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 from sqlmodel import Session, select
 from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
 
@@ -22,6 +22,9 @@ wait_seconds = 1
 def init(db_engine: Engine) -> None:
     try:
         with Session(db_engine) as session:
+            # Ensure pgvector extension is enabled
+            session.exec(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            session.commit()
             # Try to create session to check if DB is awake
             session.exec(select(1))
     except Exception as e:

@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime, JSON
+from pgvector.sqlalchemy import Vector
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -106,6 +108,27 @@ class ItemPublic(ItemBase):
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
+
+
+# RAG Models
+class DocumentChunkBase(SQLModel):
+    content: str = Field(min_length=1)
+    metadata_json: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
+
+
+class DocumentChunkCreate(DocumentChunkBase):
+    pass
+
+
+class DocumentChunk(DocumentChunkBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    embedding: Any = Field(
+        sa_column=Column(Vector(1024))  # Matches BGE-M3 dimension
+    )
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
 
 
 # Generic message

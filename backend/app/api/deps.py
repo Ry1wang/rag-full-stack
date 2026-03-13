@@ -1,6 +1,7 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Annotated
 
+import httpx
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -23,8 +24,18 @@ def get_db() -> Generator[Session, None, None]:
         yield session
 
 
+async def get_embedding_client() -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncClient(
+        base_url=settings.EMBEDDING_BASE_URL,
+        timeout=httpx.Timeout(60.0),
+        headers={"Authorization": f"Bearer {settings.EMBEDDING_API_KEY}"} if settings.EMBEDDING_API_KEY else {}
+    ) as client:
+        yield client
+
+
 SessionDep = Annotated[Session, Depends(get_db)]
 TokenDep = Annotated[str, Depends(reusable_oauth2)]
+EmbeddingDep = Annotated[httpx.AsyncClient, Depends(get_embedding_client)]
 
 
 def get_current_user(session: SessionDep, token: TokenDep) -> User:
