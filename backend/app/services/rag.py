@@ -23,7 +23,7 @@ async def embed_texts(client: httpx.AsyncClient, texts: list[str]) -> list[list[
         return []
 
     response = await client.post(
-        "/embeddings",
+        "embeddings",  # relative path; base_url must have trailing slash
         json={
             "model": settings.EMBEDDING_MODEL,
             "input": texts,

@@ -111,6 +111,24 @@ def get_document_by_hash(
     return session.exec(statement).first()
 
 
+def delete_failed_document_by_hash(
+    *, session: Session, file_hash: str, owner_id: uuid.UUID
+) -> None:
+    """Remove any previously failed document records with the same hash.
+
+    Called before creating a new Document on re-upload so stale 'failed'
+    records don't accumulate in the database.
+    """
+    statement = select(Document).where(
+        Document.file_hash == file_hash,
+        Document.owner_id == owner_id,
+        Document.status == "failed",
+    )
+    for doc in session.exec(statement).all():
+        session.delete(doc)
+    session.commit()
+
+
 def create_document_chunk(
     *,
     session: Session,

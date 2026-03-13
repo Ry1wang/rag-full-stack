@@ -87,13 +87,19 @@ async def ingest_document(
             detail=f"File content does not match declared type '{file.content_type}'.",
         )
 
-    # Deduplication: if the user already has a successfully processed copy, return it.
+    # Deduplication: return an already-processed copy without re-embedding.
     file_hash = hashlib.sha256(raw_bytes).hexdigest()
     existing = crud.get_document_by_hash(
         session=session, file_hash=file_hash, owner_id=current_user.id
     )
     if existing:
         return existing
+
+    # Clean up any stale 'failed' record for this file so re-uploads don't
+    # leave orphaned rows in the database.
+    crud.delete_failed_document_by_hash(
+        session=session, file_hash=file_hash, owner_id=current_user.id
+    )
 
     document = crud.create_document(
         session=session,

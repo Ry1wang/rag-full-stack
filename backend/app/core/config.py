@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     DEEPSEEK_API_KEY: str | None = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
-    EMBEDDING_BASE_URL: str = "https://api.siliconflow.cn/v1"
+    EMBEDDING_BASE_URL: str = "https://api.siliconflow.cn/v1/"  # trailing slash required for relative-path merging
     EMBEDDING_API_KEY: str | None = None
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIMENSION: int = 1024  # BGE-M3 standard dimension
