@@ -111,6 +111,43 @@ class ItemsPublic(SQLModel):
 
 
 # RAG Models
+
+
+class Document(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    filename: str = Field(max_length=255)
+    file_type: str = Field(max_length=50)
+    file_size: int
+    file_hash: str | None = Field(default=None, max_length=64)
+    status: str = Field(default="pending", max_length=20)
+    error_message: str | None = Field(default=None)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    chunks: list["DocumentChunk"] = Relationship(
+        back_populates="document", cascade_delete=True
+    )
+
+
+class DocumentPublic(SQLModel):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    filename: str
+    file_type: str
+    file_size: int
+    status: str
+    created_at: datetime | None = None
+
+
+class DocumentsPublic(SQLModel):
+    data: list[DocumentPublic]
+    count: int
+
+
 class DocumentChunkBase(SQLModel):
     content: str = Field(min_length=1)
     metadata_json: dict[str, Any] = Field(default_factory=dict, sa_type=JSON)
@@ -122,6 +159,9 @@ class DocumentChunkCreate(DocumentChunkBase):
 
 class DocumentChunk(DocumentChunkBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    document_id: uuid.UUID = Field(
+        foreign_key="document.id", nullable=False, ondelete="CASCADE"
+    )
     embedding: Any = Field(
         sa_column=Column(Vector(1024))  # Matches BGE-M3 dimension
     )
@@ -129,6 +169,7 @@ class DocumentChunk(DocumentChunkBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),
     )
+    document: Document | None = Relationship(back_populates="chunks")
 
 
 # Generic message

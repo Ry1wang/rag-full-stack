@@ -4,7 +4,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
-from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models import Document, DocumentChunk, Item, ItemCreate, User, UserCreate, UserUpdate
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -66,3 +66,70 @@ def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -
     session.commit()
     session.refresh(db_item)
     return db_item
+
+
+# --- RAG CRUD ---
+
+
+def create_document(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    filename: str,
+    file_type: str,
+    file_size: int,
+    file_hash: str | None = None,
+) -> Document:
+    db_doc = Document(
+        owner_id=owner_id,
+        filename=filename,
+        file_type=file_type,
+        file_size=file_size,
+        file_hash=file_hash,
+        status="pending",
+    )
+    session.add(db_doc)
+    session.commit()
+    session.refresh(db_doc)
+    return db_doc
+
+
+def get_document(*, session: Session, document_id: uuid.UUID) -> Document | None:
+    return session.get(Document, document_id)
+
+
+def create_document_chunk(
+    *,
+    session: Session,
+    document_id: uuid.UUID,
+    content: str,
+    embedding: list[float],
+    metadata: dict[str, Any] | None = None,
+) -> DocumentChunk:
+    """Add a chunk to the session without committing. Caller manages the transaction."""
+    db_chunk = DocumentChunk(
+        document_id=document_id,
+        content=content,
+        embedding=embedding,
+        metadata_json=metadata or {},
+    )
+    session.add(db_chunk)
+    return db_chunk
+
+
+def search_document_chunks(
+    *,
+    session: Session,
+    embedding: list[float],
+    owner_id: uuid.UUID,
+    limit: int = 5,
+) -> list[DocumentChunk]:
+    """Return top-K chunks ordered by cosine distance to the query embedding."""
+    statement = (
+        select(DocumentChunk)
+        .join(Document)
+        .where(Document.owner_id == owner_id)
+        .order_by(DocumentChunk.embedding.cosine_distance(embedding))  # type: ignore[attr-defined]
+        .limit(limit)
+    )
+    return list(session.exec(statement).all())
