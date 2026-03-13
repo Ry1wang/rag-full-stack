@@ -4,6 +4,7 @@ This module owns the async orchestration logic so the HTTP route can return
 202 immediately and delegate the slow work to a FastAPI BackgroundTask.
 """
 
+import hashlib
 import uuid
 
 import httpx
@@ -66,29 +67,55 @@ async def process_document(
             if not chunks:
                 raise ValueError("No text content extracted from document.")
 
-            async with httpx.AsyncClient(
-                base_url=settings.EMBEDDING_BASE_URL,
-                timeout=httpx.Timeout(60.0),
-                headers=(
-                    {"Authorization": f"Bearer {settings.EMBEDDING_API_KEY}"}
-                    if settings.EMBEDDING_API_KEY
-                    else {}
-                ),
-            ) as client:
-                # Embed in batches of 32 to stay within provider limits.
-                BATCH_SIZE = 32
-                all_embeddings: list[list[float]] = []
-                for start in range(0, len(chunks), BATCH_SIZE):
-                    batch = chunks[start : start + BATCH_SIZE]
-                    batch_embeddings = await embed_texts(client, batch)
-                    all_embeddings.extend(batch_embeddings)
+            # ── Embedding cache ──────────────────────────────────────────────
+            # Compute SHA-256 per chunk. Chunks whose hash already exists in
+            # the DB reuse the stored vector without an API call.
+            chunk_hashes = [
+                hashlib.sha256(c.encode()).hexdigest() for c in chunks
+            ]
+            embeddings: list[list[float] | None] = []
+            uncached_indices: list[int] = []
+            uncached_texts: list[str] = []
 
-            for chunk_text, embedding in zip(chunks, all_embeddings):
+            for i, (chunk_text, h) in enumerate(zip(chunks, chunk_hashes)):
+                cached = crud.get_embedding_by_content_hash(
+                    session=session, content_hash=h
+                )
+                if cached is not None:
+                    embeddings.append(cached)
+                else:
+                    embeddings.append(None)
+                    uncached_indices.append(i)
+                    uncached_texts.append(chunk_text)
+
+            if uncached_texts:
+                async with httpx.AsyncClient(
+                    base_url=settings.EMBEDDING_BASE_URL,
+                    timeout=httpx.Timeout(60.0),
+                    headers=(
+                        {"Authorization": f"Bearer {settings.EMBEDDING_API_KEY}"}
+                        if settings.EMBEDDING_API_KEY
+                        else {}
+                    ),
+                ) as client:
+                    # Embed in batches of 32 to stay within provider limits.
+                    BATCH_SIZE = 32
+                    new_embeddings: list[list[float]] = []
+                    for start in range(0, len(uncached_texts), BATCH_SIZE):
+                        batch = uncached_texts[start : start + BATCH_SIZE]
+                        new_embeddings.extend(await embed_texts(client, batch))
+
+                for pos, emb in zip(uncached_indices, new_embeddings):
+                    embeddings[pos] = emb
+
+            for chunk_text, emb, h in zip(chunks, embeddings, chunk_hashes):
+                assert emb is not None  # all slots filled by cache or API
                 crud.create_document_chunk(
                     session=session,
                     document_id=document_id,
                     content=chunk_text,
-                    embedding=embedding,
+                    embedding=emb,
+                    content_hash=h,
                 )
 
             document.status = "done"

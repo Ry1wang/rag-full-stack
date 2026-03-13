@@ -162,6 +162,8 @@ class DocumentChunk(DocumentChunkBase, table=True):
     document_id: uuid.UUID = Field(
         foreign_key="document.id", nullable=False, ondelete="CASCADE"
     )
+    # SHA-256 of the chunk text — used as an embedding cache key.
+    content_hash: str | None = Field(default=None, max_length=64, index=True)
     embedding: Any = Field(
         sa_column=Column(Vector(1024))  # Matches BGE-M3 dimension
     )

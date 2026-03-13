@@ -118,6 +118,7 @@ def create_document_chunk(
     content: str,
     embedding: list[float],
     metadata: dict[str, Any] | None = None,
+    content_hash: str | None = None,
 ) -> DocumentChunk:
     """Add a chunk to the session without committing. Caller manages the transaction."""
     db_chunk = DocumentChunk(
@@ -125,9 +126,24 @@ def create_document_chunk(
         content=content,
         embedding=embedding,
         metadata_json=metadata or {},
+        content_hash=content_hash,
     )
     session.add(db_chunk)
     return db_chunk
+
+
+def get_embedding_by_content_hash(
+    *, session: Session, content_hash: str
+) -> list[float] | None:
+    """Return the cached embedding vector for a chunk with the given content hash, or None."""
+    chunk = session.exec(
+        select(DocumentChunk)
+        .where(DocumentChunk.content_hash == content_hash)
+        .limit(1)
+    ).first()
+    if chunk is not None and chunk.embedding is not None:
+        return list(chunk.embedding)  # type: ignore[arg-type]
+    return None
 
 
 def delete_document_chunks(*, session: Session, document_id: uuid.UUID) -> None:
