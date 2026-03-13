@@ -57,6 +57,106 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const Body_rag_ingest_documentSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            format: 'binary',
+            title: 'File'
+        }
+    },
+    type: 'object',
+    required: ['file'],
+    title: 'Body_rag-ingest_document'
+} as const;
+
+export const ChunkResultSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        document_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Document Id'
+        },
+        content: {
+            type: 'string',
+            title: 'Content'
+        }
+    },
+    type: 'object',
+    required: ['id', 'document_id', 'content'],
+    title: 'ChunkResult'
+} as const;
+
+export const DocumentPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        filename: {
+            type: 'string',
+            title: 'Filename'
+        },
+        file_type: {
+            type: 'string',
+            title: 'File Type'
+        },
+        file_size: {
+            type: 'integer',
+            title: 'File Size'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'owner_id', 'filename', 'file_type', 'file_size', 'status'],
+    title: 'DocumentPublic'
+} as const;
+
+export const DocumentsPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/DocumentPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'DocumentsPublic'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -249,6 +349,25 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const SearchRequestSchema = {
+    properties: {
+        query: {
+            type: 'string',
+            title: 'Query'
+        },
+        limit: {
+            type: 'integer',
+            maximum: 20,
+            minimum: 1,
+            title: 'Limit',
+            default: 5
+        }
+    },
+    type: 'object',
+    required: ['query'],
+    title: 'SearchRequest'
 } as const;
 
 export const TokenSchema = {

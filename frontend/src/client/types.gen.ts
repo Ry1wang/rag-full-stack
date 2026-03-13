@@ -9,6 +9,31 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type Body_rag_ingest_document = {
+    file: (Blob | File);
+};
+
+export type ChunkResult = {
+    id: string;
+    document_id: string;
+    content: string;
+};
+
+export type DocumentPublic = {
+    id: string;
+    owner_id: string;
+    filename: string;
+    file_type: string;
+    file_size: number;
+    status: string;
+    created_at?: (string | null);
+};
+
+export type DocumentsPublic = {
+    data: Array<DocumentPublic>;
+    count: number;
+};
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
@@ -50,6 +75,11 @@ export type PrivateUserCreate = {
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+export type SearchRequest = {
+    query: string;
+    limit?: number;
 };
 
 export type Token = {
@@ -176,6 +206,37 @@ export type PrivateCreateUserData = {
 };
 
 export type PrivateCreateUserResponse = (UserPublic);
+
+export type RagIngestDocumentData = {
+    formData: Body_rag_ingest_document;
+};
+
+export type RagIngestDocumentResponse = (DocumentPublic);
+
+export type RagListDocumentsData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type RagListDocumentsResponse = (DocumentsPublic);
+
+export type RagGetDocumentData = {
+    documentId: string;
+};
+
+export type RagGetDocumentResponse = (DocumentPublic);
+
+export type RagDeleteDocumentData = {
+    documentId: string;
+};
+
+export type RagDeleteDocumentResponse = (Message);
+
+export type RagSearchDocumentsData = {
+    requestBody: SearchRequest;
+};
+
+export type RagSearchDocumentsResponse = (Array<ChunkResult>);
 
 export type UsersReadUsersData = {
     limit?: number;
