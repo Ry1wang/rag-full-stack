@@ -1,13 +1,10 @@
 import hashlib
-import io
 import uuid
 from pathlib import Path
 from typing import Any
 
-import fitz  # PyMuPDF
-from docx import Document as DocxDocument
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, UploadFile
-from sqlmodel import SQLModel, col, func, select
+from sqlmodel import Field, SQLModel, col, func, select
 
 from app import crud
 from app.api.deps import CurrentUser, EmbeddingDep, SessionDep
@@ -47,21 +44,9 @@ def _safe_filename(raw: str | None) -> str:
     return name or "unknown"
 
 
-def _extract_text(raw_bytes: bytes, content_type: str) -> str:
-    """Extract plain text from the uploaded file bytes."""
-    if content_type == "text/plain":
-        return raw_bytes.decode("utf-8", errors="replace")
-    elif content_type == "application/pdf":
-        doc = fitz.open(stream=raw_bytes, filetype="pdf")
-        return "\n\n".join(page.get_text() for page in doc)  # type: ignore[union-attr]
-    else:  # DOCX
-        doc_x = DocxDocument(io.BytesIO(raw_bytes))
-        return "\n\n".join(p.text for p in doc_x.paragraphs if p.text.strip())
-
-
 class SearchRequest(SQLModel):
     query: str
-    limit: int = 5
+    limit: int = Field(default=5, ge=1, le=20)
 
 
 class ChunkResult(SQLModel):
