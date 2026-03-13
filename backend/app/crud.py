@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
@@ -123,8 +124,14 @@ def search_document_chunks(
     embedding: list[float],
     owner_id: uuid.UUID,
     limit: int = 5,
+    ef_search: int = 100,
 ) -> list[DocumentChunk]:
-    """Return top-K chunks ordered by cosine distance to the query embedding."""
+    """Return top-K chunks ordered by cosine distance to the query embedding.
+
+    ef_search controls the HNSW dynamic candidate list size at query time.
+    Higher values improve recall at the cost of latency (pgvector default is 40).
+    """
+    session.execute(text(f"SET LOCAL hnsw.ef_search = {ef_search}"))
     statement = (
         select(DocumentChunk)
         .join(Document)
