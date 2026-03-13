@@ -57,6 +57,9 @@ async def process_document(
         if not document:
             return
 
+        # Idempotency: remove any partial chunks from a previous failed attempt.
+        crud.delete_document_chunks(session=session, document_id=document_id)
+
         try:
             content = _extract_text(raw_bytes, content_type)
             chunks = text_splitter.split_text(content)

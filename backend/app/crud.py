@@ -130,6 +130,18 @@ def create_document_chunk(
     return db_chunk
 
 
+def delete_document_chunks(*, session: Session, document_id: uuid.UUID) -> None:
+    """Delete all chunks for a document. Used for idempotent re-ingestion on retry."""
+    chunks = list(
+        session.exec(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        ).all()
+    )
+    for chunk in chunks:
+        session.delete(chunk)
+    session.commit()
+
+
 def search_document_chunks(
     *,
     session: Session,
