@@ -6,14 +6,15 @@ from typing import Any
 
 import fitz  # PyMuPDF
 from docx import Document as DocxDocument
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, UploadFile
 from sqlmodel import SQLModel, col, func, select
 
 from app import crud
 from app.api.deps import CurrentUser, EmbeddingDep, SessionDep
 from app.core.rate_limit import limiter
 from app.models import Document, DocumentChunk, DocumentPublic, DocumentsPublic, Message
-from app.services import rag as rag_service
+from app.services import ingest as ingest_service
+from app.services import rag as rag_service  # still used by /search
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -69,14 +70,14 @@ class ChunkResult(SQLModel):
     content: str
 
 
-@router.post("/ingest", response_model=DocumentPublic)
+@router.post("/ingest", response_model=DocumentPublic, status_code=202)
 @limiter.limit("10/minute")
 async def ingest_document(
     *,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: SessionDep,
     current_user: CurrentUser,
-    embedding_client: EmbeddingDep,
     file: UploadFile,
 ) -> Any:
     """Upload a document, parse its text, embed the chunks, and store in the database."""
@@ -109,14 +110,6 @@ async def ingest_document(
     if existing:
         return existing
 
-    try:
-        content = _extract_text(raw_bytes, file.content_type)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Failed to parse document: {exc}",
-        ) from exc
-
     document = crud.create_document(
         session=session,
         owner_id=current_user.id,
@@ -126,27 +119,13 @@ async def ingest_document(
         file_hash=file_hash,
     )
 
-    try:
-        chunk_pairs = await rag_service.prepare_chunks(embedding_client, content)
-
-        for chunk_text, vector in chunk_pairs:
-            crud.create_document_chunk(
-                session=session,
-                document_id=document.id,
-                content=chunk_text,
-                embedding=vector,
-            )
-
-        document.status = "done"
-        session.add(document)
-        session.commit()
-        session.refresh(document)
-    except Exception as e:
-        document.status = "failed"
-        document.error_message = str(e)
-        session.add(document)
-        session.commit()
-        raise HTTPException(status_code=502, detail=f"Embedding failed: {e}") from e
+    # Schedule processing as a background task; return 202 immediately.
+    background_tasks.add_task(
+        ingest_service.process_document,
+        document_id=document.id,
+        raw_bytes=raw_bytes,
+        content_type=file.content_type,
+    )
 
     return document
 
