@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -17,6 +18,27 @@ ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+
+# Magic bytes (file header signatures) for supported binary types.
+# text/plain has no reliable magic bytes so it is omitted.
+_MAGIC_BYTES: dict[str, bytes] = {
+    "application/pdf": b"%PDF",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": b"PK\x03\x04",
+}
+
+
+def _validate_magic_bytes(content_type: str, data: bytes) -> bool:
+    """Return True if the file header matches the declared MIME type."""
+    magic = _MAGIC_BYTES.get(content_type)
+    if magic is None:
+        return True  # text/plain: no standard magic bytes
+    return data[: len(magic)] == magic
+
+
+def _safe_filename(raw: str | None) -> str:
+    """Strip directory components from a filename to prevent path traversal."""
+    name = Path(raw or "unknown").name
+    return name or "unknown"
 
 
 class SearchRequest(SQLModel):
@@ -45,12 +67,19 @@ async def ingest_document(
             detail=f"Unsupported file type '{file.content_type}'. Allowed: {sorted(ALLOWED_CONTENT_TYPES)}",
         )
 
+    safe_filename = _safe_filename(file.filename)
     raw_bytes = await file.read()
 
     if len(raw_bytes) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,
             detail=f"File exceeds maximum allowed size of {MAX_FILE_SIZE // (1024 * 1024)} MB.",
+        )
+
+    if not _validate_magic_bytes(file.content_type, raw_bytes):
+        raise HTTPException(
+            status_code=400,
+            detail=f"File content does not match declared type '{file.content_type}'.",
         )
 
     if file.content_type == "text/plain":
@@ -65,7 +94,7 @@ async def ingest_document(
     document = crud.create_document(
         session=session,
         owner_id=current_user.id,
-        filename=file.filename or "unknown",
+        filename=safe_filename,
         file_type=file.content_type,
         file_size=len(raw_bytes),
     )
