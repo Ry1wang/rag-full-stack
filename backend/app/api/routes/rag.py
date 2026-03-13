@@ -1,7 +1,11 @@
+import hashlib
+import io
 import uuid
 from pathlib import Path
 from typing import Any
 
+import fitz  # PyMuPDF
+from docx import Document as DocxDocument
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from sqlmodel import SQLModel, col, func, select
 
@@ -40,6 +44,18 @@ def _safe_filename(raw: str | None) -> str:
     """Strip directory components from a filename to prevent path traversal."""
     name = Path(raw or "unknown").name
     return name or "unknown"
+
+
+def _extract_text(raw_bytes: bytes, content_type: str) -> str:
+    """Extract plain text from the uploaded file bytes."""
+    if content_type == "text/plain":
+        return raw_bytes.decode("utf-8", errors="replace")
+    elif content_type == "application/pdf":
+        doc = fitz.open(stream=raw_bytes, filetype="pdf")
+        return "\n\n".join(page.get_text() for page in doc)  # type: ignore[union-attr]
+    else:  # DOCX
+        doc_x = DocxDocument(io.BytesIO(raw_bytes))
+        return "\n\n".join(p.text for p in doc_x.paragraphs if p.text.strip())
 
 
 class SearchRequest(SQLModel):
@@ -85,14 +101,21 @@ async def ingest_document(
             detail=f"File content does not match declared type '{file.content_type}'.",
         )
 
-    if file.content_type == "text/plain":
-        content = raw_bytes.decode("utf-8", errors="replace")
-    elif file.content_type == "application/pdf":
-        # PDF parsing (PyMuPDF) — Phase 2
-        raise HTTPException(status_code=501, detail="PDF parsing not yet implemented.")
-    else:
-        # DOCX parsing (python-docx) — Phase 2
-        raise HTTPException(status_code=501, detail="DOCX parsing not yet implemented.")
+    # Deduplication: if the user already has a successfully processed copy, return it.
+    file_hash = hashlib.sha256(raw_bytes).hexdigest()
+    existing = crud.get_document_by_hash(
+        session=session, file_hash=file_hash, owner_id=current_user.id
+    )
+    if existing:
+        return existing
+
+    try:
+        content = _extract_text(raw_bytes, file.content_type)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Failed to parse document: {exc}",
+        ) from exc
 
     document = crud.create_document(
         session=session,
@@ -100,6 +123,7 @@ async def ingest_document(
         filename=safe_filename,
         file_type=file.content_type,
         file_size=len(raw_bytes),
+        file_hash=file_hash,
     )
 
     try:

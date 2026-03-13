@@ -99,6 +99,18 @@ def get_document(*, session: Session, document_id: uuid.UUID) -> Document | None
     return session.get(Document, document_id)
 
 
+def get_document_by_hash(
+    *, session: Session, file_hash: str, owner_id: uuid.UUID
+) -> Document | None:
+    """Return a successfully processed document with the given SHA-256 hash owned by user."""
+    statement = select(Document).where(
+        Document.file_hash == file_hash,
+        Document.owner_id == owner_id,
+        Document.status == "done",
+    )
+    return session.exec(statement).first()
+
+
 def create_document_chunk(
     *,
     session: Session,
