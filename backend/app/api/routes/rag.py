@@ -2,11 +2,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, Request, UploadFile
 from sqlmodel import SQLModel, col, func, select
 
 from app import crud
 from app.api.deps import CurrentUser, EmbeddingDep, SessionDep
+from app.core.rate_limit import limiter
 from app.models import Document, DocumentChunk, DocumentPublic, DocumentsPublic, Message
 from app.services import rag as rag_service
 
@@ -53,8 +54,10 @@ class ChunkResult(SQLModel):
 
 
 @router.post("/ingest", response_model=DocumentPublic)
+@limiter.limit("10/minute")
 async def ingest_document(
     *,
+    request: Request,
     session: SessionDep,
     current_user: CurrentUser,
     embedding_client: EmbeddingDep,
@@ -182,8 +185,10 @@ def delete_document(
 
 
 @router.post("/search", response_model=list[ChunkResult])
+@limiter.limit("60/minute")
 async def search_documents(
     *,
+    request: Request,
     session: SessionDep,
     current_user: CurrentUser,
     embedding_client: EmbeddingDep,
